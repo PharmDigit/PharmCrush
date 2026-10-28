@@ -2883,10 +2883,14 @@ const Access = (() => {
       }
       const app = PDX.firebaseApp(firebase, PC_CONFIG.firebase, 'pharmcrush');
       this.auth = app.auth(); this.db = app.firestore();
-      this.auth.onAuthStateChanged(u => onUser(u ? {uid:u.uid, email:u.email||''} : null));
+      this.auth.onAuthStateChanged(u => onUser(u ? {uid:u.uid, email:u.email||'', verified:!!u.emailVerified} : null));
     },
     signIn(e, p){ return this.auth.signInWithEmailAndPassword(e, p); },
-    signUp(e, p){ return this.auth.createUserWithEmailAndPassword(e, p); },
+    async signUp(e, p){ const c = await this.auth.createUserWithEmailAndPassword(e, p); this.sendVerify().catch(x => console.warn('Verification email not sent', x)); return c; },
+    // email verification: a link is emailed at sign-up; a verified email is required before buying a pass
+    sendVerify(){ const u = this.auth.currentUser; if(!u) return Promise.reject(new Error('Not signed in.'));
+      return u.sendEmailVerification({url: location.origin + location.pathname}).catch(e => e && e.code === 'auth/too-many-requests' ? Promise.reject(e) : u.sendEmailVerification()); },
+    async refreshVerified(){ const u = this.auth.currentUser; if(!u) return false; await u.reload(); const v = !!this.auth.currentUser.emailVerified; if(v) await this.auth.currentUser.getIdToken(true); return v; },
     google(){ return this.auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); },
     reset(e){ return this.auth.sendPasswordResetEmail(e); },
     signOut(){ return this.auth.signOut(); },
@@ -2907,6 +2911,7 @@ const Access = (() => {
         body:JSON.stringify({priceId, app:PC_CONFIG.app, successUrl:here+'?pc_checkout=success&session_id={CHECKOUT_SESSION_ID}', cancelUrl:here+'?pc_checkout=cancel'})}); }
       catch(e){ throw Object.assign(new Error('Could not reach the checkout service. Check your connection and try again.'), {code:'unavailable'}); }
       try{ body = await r.json(); }catch(e){}
+      if(body.code === 'email-not-verified') throw Object.assign(new Error(body.error || 'Please verify your email first.'), {code:'unverified'});
       if(!r.ok || !body.url) throw Object.assign(new Error(body.error || 'Unable to start checkout. Please try again.'), {code:'checkout-failed'});
       location.assign(body.url);
     }
@@ -2979,10 +2984,51 @@ const Access = (() => {
     if(premium() && ent.plan==='lifetime'){ toast('You already have a Lifetime Pass. No new payment is needed.'); return; }
     if(!user) return openGetStarted({plan});
     if(!fb || !fb.auth) return unavailable();
+    if(user.verified === false) return verifyDialog(plan);        // a verified email is required before buying
     const p = PC_PLANS[plan];
     PDX.disclaimer({app:'PharmCrush', plan:{name:p.name, price:p.price, term:p.term}, legalHtml:TERMS, onBack:() => openPlans(),
-      onAgree:async () => { try{ sessionStorage.setItem('pc_before', entKey()); }catch(e){} await fb.checkout(plan); }});
+      onAgree:async () => { try{ sessionStorage.setItem('pc_before', entKey()); }catch(e){}
+        try{ await fb.checkout(plan); }
+        catch(e){ if(e.code === 'unverified'){ user.verified = false; verifyDialog(plan); return new Promise(() => {}); } throw e; } }});
   }
+
+  /* ---------- email verification (required before buying a pass) ---------- */
+  function verifyDialog(plan){
+    const em = PDX.esc(user && user.email || 'your email');
+    PDX.modal('verify',
+      `<h2 id="pdx-title">Verify your email</h2>
+       <p class="pdx-small">To buy a pass, please confirm your email address. We sent a verification link to <b>${em}</b>.</p>
+       <ol class="pdx-small" style="margin:0;padding-left:20px"><li>Open the email from PharmDigit and click the link.</li><li>Come back here and tap <b>I’ve verified</b>.</li></ol>
+       <p class="pdx-small pdx-muted">Don’t see it? Check your Junk or Spam folder, or send it again.</p>
+       <p class="pdx-small" id="pc-vmsg" role="status"></p>
+       <div class="pdx-row"><button class="pdx-btn primary" type="button" id="pc-vok">I’ve verified${plan ? ' · continue' : ''}</button><button class="pdx-btn ghost" type="button" id="pc-vsend">Resend email</button></div>
+       <p class="pdx-small"><button class="pdx-link" type="button" id="pc-vother">Wrong email? Sign out and use another account</button></p>`,
+      b => {
+        const msg = b.querySelector('#pc-vmsg'), ok = b.querySelector('#pc-vok'), send = b.querySelector('#pc-vsend');
+        const say = (t, bad) => { msg.textContent = t; msg.style.color = bad ? 'var(--pdx-bad)' : 'var(--pdx-ok)'; };
+        ok.onclick = async () => {
+          ok.disabled = true; const label = ok.textContent; ok.textContent = 'Checking…';
+          try{
+            if(await fb.refreshVerified()){ user.verified = true; renderHome(); toast('Email verified. Thank you!'); PDX.close(); if(plan) setTimeout(() => buy(plan), 150); else setTimeout(openAccount, 150); return; }
+            say('Not verified yet. Open the link in the email first, then tap “I’ve verified”.', true);
+          }catch(e){ say(msgOf(e), true); }
+          ok.disabled = false; ok.textContent = label;
+        };
+        send.onclick = async () => {
+          send.disabled = true;
+          try{ await fb.sendVerify(); say(`Sent again to ${user.email}. It can take a minute to arrive.`); }
+          catch(e){ say(e && e.code === 'auth/too-many-requests' ? 'Too many emails sent. Please wait a few minutes before trying again.' : msgOf(e), true); }
+          setTimeout(() => { send.disabled = false; }, 20000);
+        };
+        b.querySelector('#pc-vother').onclick = () => signOut();
+      });
+    watchScrim();
+  }
+  // a player who verified in another tab: pick it up when they come back to this one
+  window.addEventListener('focus', () => {
+    if(!user || user.verified !== false || !fb || !fb.auth || !fb.auth.currentUser) return;
+    fb.refreshVerified().then(v => { if(v){ user.verified = true; renderHome(); if(PDX.isOpen('verify')) toast('Email verified. Tap “I’ve verified” to continue.'); } }).catch(() => {});
+  });
   async function resumePurchase(plan){
     for(let i=0; i<12 && user && ent==null; i++) await sleep(400);
     if(premium() && ent.plan==='lifetime'){ toast('You already have a Lifetime Pass. No new payment is needed.'); afterChange(); return; }
@@ -3006,6 +3052,8 @@ const Access = (() => {
     PDX.account({email:user.email || 'your account', state:st, plan:ent && ent.plan,
       status:PDX.passStatus({state:st, plan:ent && ent.plan, expiresAt:ent && ent.expiresAt, purchasedAt:ent && ent.purchasedAt, semName:'Semester Pass', lifeName:'Lifetime Pass', termDays:183, freeText:freeText()}),
       note:'Your pass is saved to your account and works on any device where you sign in. Each PharmDigit app is purchased separately.',
+      extraHtml: user.verified === false ? '<div class="pdx-fb" style="background:var(--pdx-warn-soft);border-radius:10px;padding:10px 12px"><span class="ttl">Email not verified</span><span class="pdx-small">Verify your email before buying a pass. <button class="pdx-link" type="button" data-pc-verify>Verify now</button></span></div>' : '',
+      onMount: b => { const v = b.querySelector('[data-pc-verify]'); if(v) v.onclick = () => { fb.sendVerify().catch(() => {}); verifyDialog(null); }; },
       onPlans:() => openPlans(), onSignOut:signOut});
   }
   async function signOut(){
