@@ -400,6 +400,10 @@ kbd{font:700 11.5px var(--body);color:var(--ink);background:var(--seg);border:1p
 .tagline{margin:-10px 0 0;font:600 13px/1.35 var(--body);letter-spacing:.01em;color:var(--muted);text-align:center}
 @media (max-width:350px){.tagline{font-size:11.5px;letter-spacing:0}}
 .byline{font:600 12px/1.4 var(--body);color:var(--muted);margin-top:-8px;letter-spacing:.02em}
+.qbank-link{display:flex;flex-direction:column;align-items:center;gap:6px;margin:6px auto 0;padding:10px 14px 10px;border-radius:16px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,.12);text-decoration:none;color:#475569;font:600 12.5px/1.3 var(--body);transition:transform .15s,box-shadow .15s}
+.qbank-link:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(15,23,42,.14)}
+.qbank-link img{display:block;width:180px;height:auto;border-radius:10px}
+.qbank-link b{color:#0f172a}
 .about-pc{max-width:560px;margin:10px auto 0;padding:14px 16px 0;border-top:1px solid color-mix(in srgb,var(--muted) 30%,transparent);font:500 13px/1.55 var(--body);color:var(--muted);text-align:center;user-select:text;-webkit-user-select:text}
 .about-pc h2{font:700 14px/1.3 var(--body);color:var(--ink);margin:0 0 6px}
 .about-pc p{margin:0 0 8px}
@@ -640,6 +644,10 @@ kbd{font:700 11.5px var(--body);color:var(--ink);background:var(--seg);border:1p
     <div class="homelinks"><a class="linkbtn" id="helpBtn" href="/how-to-play/"><span data-icon="book"></span>How to play</a><span class="sep" aria-hidden="true">·</span><a class="linkbtn" id="legalBtn" href="/how-to-play/#disclaimer"><span data-icon="shield"></span>Disclaimer</a><span class="sep" aria-hidden="true">·</span><button class="linkbtn" id="acctBtn" type="button"><span data-icon="user"></span>Sign in</button></div>
     <div class="freeline" id="freeLine" aria-live="polite"></div>
     <div class="byline">By <a href="https://www.pharmdigit.com/" target="_blank" rel="noopener">pharmdigit.com</a> · <a href="/top-300-drugs/">Top 300 drugs list</a></div>
+    <a class="qbank-link" href="https://www.pharmacyqbank.com/" target="_blank" rel="noopener" aria-label="PharmacyQBank: question banks for pharmacy students. Opens pharmacyqbank.com">
+      <img src="/pharmacyqbank-logo.webp" width="180" height="120" alt="PharmacyQBank logo" loading="lazy">
+      <span>More practice: <b>PharmacyQBank</b> question banks ▸</span>
+    </a>
     <section class="about-pc" aria-label="About PharmCrush">
       <h2>A top 300 medications quiz game</h2>
       <p>PharmCrush is a free quiz game that helps pharmacy students, pharmacy technicians and NAPLEX candidates learn the most commonly prescribed drugs. Each drug comes with up to ten question types, from brand and generic names and drug class to indications, contraindications, black box warnings, side effects and antidotes.</p>
